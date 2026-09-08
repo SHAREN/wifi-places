@@ -27,17 +27,32 @@ apply plugin: 'com.android.application'
 apply plugin: 'de.undercouch.download'
 apply plugin: 'com.google.android.libraries.mapsplatform.secrets-gradle-plugin'
 
+def privateProps = new Properties()
+def privatePropsFile = rootProject.file('private.properties')
+if (privatePropsFile.exists()) {
+    privatePropsFile.withInputStream { privateProps.load(it) }
+}
+def privateProp = { String key ->
+    project.findProperty(key) ?: privateProps.getProperty(key) ?: ''
+}
+def fingerprintEndpoint = privateProp('fingerprintEndpoint')
+def fingerprintAuth = privateProp('fingerprintAuth')
+def updateManifestUrl = privateProp('updateManifestUrl')
+
 android {
     namespace "net.wigle.wigleandroid"
     compileSdk = 36
     defaultConfig {
-        applicationId "net.wigle.wigleandroid"
+        applicationId "net.sharteman.wifiplaces"
         minSdkVersion 24
         targetSdkVersion 36
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
         multiDexEnabled true
         buildConfigField "boolean", "FOSS_MAIN_BUILD", "${isFossMainBuild()}"
+        buildConfigField "String", "FINGERPRINT_ENDPOINT", "\"${fingerprintEndpoint}\""
+        buildConfigField "String", "FINGERPRINT_TOKEN", "\"${fingerprintAuth}\""
+        buildConfigField "String", "UPDATE_MANIFEST_URL", "\"${updateManifestUrl}\""
     }
     buildFeatures {
         buildConfig = true

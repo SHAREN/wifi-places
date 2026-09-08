@@ -1,4 +1,25 @@
-# WiGLE Wireless Wardriving
+# WiFi Places — smart self-hosted WiGLE fork
+
+This fork keeps WiGLE's mature Android RF scanner but adds a privacy-first, self-hosted location-fingerprinting mode. It is designed to learn recurring places from nearby Wi-Fi BSSIDs, use precise location mainly while learning or verifying unknown places, recover automatically from stuck Wi-Fi scan callbacks, and keep raw observations on a user-controlled server instead of requiring cloud upload.
+
+Key additions in this fork:
+
+- persistent private upload queue with complete timestamped Wi-Fi scan batches;
+- self-hosted ingestion server and evolving place fingerprints;
+- smart location-power policy: known Wi-Fi fingerprint → temporarily suppress continuous GPS; unknown/ambiguous fingerprint → re-enable location and learn;
+- Android network-location fallback enabled by default for indoor learning;
+- Wi-Fi scan watchdog that retries stuck scan callbacks without relying on forbidden system Wi-Fi toggles;
+- stock WiGLE.net upload control disabled by default in the private collector UI;
+- optional self-hosted APK update manifest for automatic update checks/downloads;
+- strict separation between public source and private endpoint/token/build data.
+
+Architecture and design goals: [`docs/SMART_LOCATION_ARCHITECTURE.md`](docs/SMART_LOCATION_ARCHITECTURE.md). Self-hosted server: [`server/`](server/).
+
+This repository remains based on the upstream WiGLE Wireless Wardriving project and retains its license and upstream functionality unless explicitly changed below.
+
+---
+
+# Upstream WiGLE Wireless Wardriving
 
 ![ci badge](https://github.com/wiglenet/wigle-wifi-wardriving/actions/workflows/android.yml/badge.svg)
 

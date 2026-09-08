@@ -67,6 +67,16 @@ public final class WigleService extends Service {
             while ( ! done.get() ) {
                 MainActivity.sleep( 15000L );
                 setupNotification();
+                // Keep private upload retries alive even when the Activity is backgrounded.
+                // This is intentionally independent from WiGLE.net upload logic.
+                net.wigle.wigleandroid.listener.FingerprintUploader.get(getApplicationContext()).kick();
+                final MainActivity activity = MainActivity.getMainActivity();
+                if (activity != null) {
+                    activity.runWifiScanWatchdog();
+                }
+                // Rate-limited internally (currently every six hours). Private builds can point
+                // this at a self-hosted update manifest; public builds leave the URL empty.
+                net.wigle.wigleandroid.util.PrivateUpdateManager.get(getApplicationContext()).checkForUpdates(false);
             }
             Logging.info("GuardThread done");
         }
@@ -335,7 +345,6 @@ public final class WigleService extends Service {
         builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
         builder.addAction(android.R.drawable.ic_media_pause, "Pause", pauseIntent);
         builder.addAction(android.R.drawable.ic_media_play, "Scan", scanIntent);
-        builder.addAction(android.R.drawable.ic_menu_upload, "Upload", uploadIntent);
 
         try {
             //ALIBI: https://stackoverflow.com/questions/43123466/java-lang-nullpointerexception-attempt-to-invoke-interface-method-java-util-it
@@ -404,12 +413,6 @@ public final class WigleService extends Service {
                         .build();
                 builder.addAction(scanAction);
             }
-            Notification.Action ulAction = new Notification.Action.Builder(
-                    Icon.createWithResource(this, android.R.drawable.ic_menu_upload),
-                    "Upload", uploadIntent)
-                    .build();
-            builder.addAction(ulAction);
-
             return builder.build();
         }
         return null;
@@ -484,12 +487,6 @@ public final class WigleService extends Service {
                     .build();
             builder.addAction(scanAction);
         }
-        Notification.Action ulAction = new Notification.Action.Builder(
-                Icon.createWithResource(this, android.R.drawable.ic_menu_upload),
-                "Upload", uploadIntent)
-                .build();
-        builder.addAction(ulAction);
-
         return builder.build();
     }
 

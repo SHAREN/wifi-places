@@ -2,8 +2,8 @@
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <string name="empty"></string>
     <string name="stats">Starting</string>
-    <string name="app_name">WiGLE WiFi Wardriving</string>
-    <string name="list_app_name">WiGLE WiFi</string>
+    <string name="app_name">WiFi Places Logger</string>
+    <string name="list_app_name">WiFi Places</string>
     <string name="settings_app_name">Settings</string>
     <string name="mapping_app_name">Map</string>
     <string name="dashboard_app_name">Dashboard</string>

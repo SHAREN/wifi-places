@@ -115,6 +115,27 @@ public class WifiReceiver extends BroadcastReceiver {
     }
 
     /**
+     * Recovery watchdog for the case where Android/WifiManager accepts a scan request but the
+     * expected callback never arrives. Modern Android does not allow normal third-party apps to
+     * reliably toggle system Wi-Fi, so recovery clears our stale in-flight latch and submits a
+     * fresh request instead of depending on setWifiEnabled(false/true).
+     */
+    public void watchdogScan() {
+        if (mainActivity == null || !mainActivity.isScanning()) return;
+        final long now = System.currentTimeMillis();
+        final long reference = lastScanResponseTime < 0 ? constructionTime : lastScanResponseTime;
+        if (now - reference < 120_000L) return;
+
+        Logging.warn("WiFi scan watchdog: no callback for " + ((now - reference) / 1000L)
+                + "s; clearing stale in-flight scan and retrying");
+        scanInFlight = false;
+        // Advance the watchdog reference so a hard platform failure does not create a tight retry
+        // loop. The normal Wi-Fi timer continues to make additional bounded attempts.
+        lastScanResponseTime = now;
+        mainHandler.post(this::doWifiScan);
+    }
+
+    /**
      * the massive core receive handler for WiFi scan callback
      * @param context context of the onreceive
      * @param intent the intent for the receive
@@ -155,10 +176,12 @@ public class WifiReceiver extends BroadcastReceiver {
 
         final long setPeriod = mainActivity.getLocationSetPeriod();
         if ( setPeriod != prevScanPeriod && mainActivity.isScanning() ) {
-            // update our location scanning speed
-            Logging.info("setting location updates to: " + setPeriod);
-            mainActivity.setLocationUpdates(setPeriod, 0f);
-
+            // update our location scanning speed unless the server has confidently recognized
+            // a learned Wi-Fi fingerprint and temporarily put location into low-power mode.
+            if (!FingerprintUploader.isLocationSuppressed()) {
+                Logging.info("setting location updates to: " + setPeriod);
+                mainActivity.setLocationUpdates(setPeriod, 0f);
+            }
             prevScanPeriod = setPeriod;
         }
 
@@ -181,9 +204,12 @@ public class WifiReceiver extends BroadcastReceiver {
         // MainActivity.info("now minus haveloctime: " + (now-lastHaveLocationTime)
         //    + " lastHaveLocationTime: " + lastHaveLocationTime);
         if (now - lastHaveLocationTime > 45000L) {
-            // no location in a while, make sure we're subscribed to updates
-            Logging.info("no location for a while, setting location update period: " + setPeriod);
-            mainActivity.setLocationUpdates(setPeriod, 0f);
+            // No location in a while. Re-subscribe only when smart low-power mode is not
+            // intentionally suppressing location for a known Wi-Fi fingerprint.
+            if (!FingerprintUploader.isLocationSuppressed()) {
+                Logging.info("no location for a while, setting location update period: " + setPeriod);
+                mainActivity.setLocationUpdates(setPeriod, 0f);
+            }
             // don't do this until another period has passed
             lastHaveLocationTime = now;
         }
@@ -332,6 +358,13 @@ public class WifiReceiver extends BroadcastReceiver {
                     }
                 }
             }
+        }
+
+        // Private sidecar: preserve the complete Wi-Fi scan as one timestamped location
+        // fingerprint. The uploader has its own persistent retry queue and samples at a
+        // lower cadence than WiGLE's internal scanner to keep storage/network use bounded.
+        if (results != null && !results.isEmpty()) {
+            FingerprintUploader.get(mainActivity).enqueue(location, results, wifiManager);
         }
 
         // check if there are more "New" nets

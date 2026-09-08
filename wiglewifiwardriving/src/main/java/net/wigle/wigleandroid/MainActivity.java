@@ -1210,6 +1210,12 @@ public final class MainActivity extends AppCompatActivity implements TextToSpeec
         Logging.info("MAIN: resume.");
         super.onResume();
         mainActivity = this;
+        // Private collector: reopening the app must also retry any scan batches that were queued
+        // while the network/VPN route was unavailable.
+        net.wigle.wigleandroid.listener.FingerprintUploader.get(getApplicationContext()).kick();
+        // Also resume a downloaded self-hosted update (notably after Android's unknown-source
+        // permission screen) without waiting for the six-hour manifest cadence.
+        net.wigle.wigleandroid.util.PrivateUpdateManager.get(getApplicationContext()).checkForUpdates(false);
 
         // deal with wake lock
         if (!state.wakeLock.isHeld() && state.screenLocked) {
@@ -2264,6 +2270,12 @@ public final class MainActivity extends AppCompatActivity implements TextToSpeec
         state.wifiReceiver.scheduleScan();
     }
 
+    public void runWifiScanWatchdog() {
+        if (state != null && state.wifiReceiver != null) {
+            state.wifiReceiver.watchdogScan();
+        }
+    }
+
     public void speak(final String string) {
         final MainActivity a = MainActivity.getMainActivity();
         if (a != null && !a.isMuted() && state.tts != null) {
@@ -2597,7 +2609,10 @@ public final class MainActivity extends AppCompatActivity implements TextToSpeec
             Logging.error("Error registering for gnss: " + ex, ex);
         }
 
-        final boolean useNetworkLoc = prefs.getBoolean(PreferenceKeys.PREF_USE_NETWORK_LOC, false);
+        // WiFi Places is designed for indoor learning. Prefer Android's network provider by
+        // default so an unknown place can still obtain a useful fix when GNSS is weak indoors.
+        // Users who explicitly disabled this upstream preference keep their choice.
+        final boolean useNetworkLoc = prefs.getBoolean(PreferenceKeys.PREF_USE_NETWORK_LOC, true);
 
         final List<String> providers = locationManager.getAllProviders();
         if (providers != null) {

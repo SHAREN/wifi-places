@@ -2,8 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:installLocation="auto"
-    android:versionCode="311"
-    android:versionName="2.111">
+    android:versionCode="313"
+    android:versionName="2.111-private3">
 
     <attribution android:tag="@string/empty"
         android:label="@string/app_name" />
@@ -29,12 +29,13 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="net.wigle.wigleandroid.permission.MAPS_RECEIVE" />
+    <uses-permission android:name="net.sharteman.wifiplaces.permission.MAPS_RECEIVE" />
     <uses-permission android:name="com.google.android.providers.gsf.permission.READ_GSERVICES" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- permission for start-on-boot -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
 
@@ -43,7 +44,7 @@
     <uses-permission-sdk-23 android:name="android.permission.CAMERA" />
 
     <permission
-        android:name="net.wigle.wigleandroid.permission.MAPS_RECEIVE"
+        android:name="net.sharteman.wifiplaces.permission.MAPS_RECEIVE"
         android:protectionLevel="signature" />
 
     <uses-feature
@@ -349,7 +350,8 @@
             </intent-filter>
         </receiver>
         <receiver android:name=".listener.UploadReceiver"
-            android:exported="true"
+            android:enabled="false"
+            android:exported="false"
             tools:ignore="ExportedReceiver">
             <intent-filter>
                 <action android:name="net.wigle.wigleandroid.UPLOAD" />

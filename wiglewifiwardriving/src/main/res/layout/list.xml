@@ -149,6 +149,7 @@
             android:layout_marginTop="2dp"
             android:layout_marginEnd="6dp"
             android:layout_weight="0"
+            android:visibility="gone"
             android:background="@drawable/upload_button"
             android:text="@string/upload_button" />
         <LinearLayout
