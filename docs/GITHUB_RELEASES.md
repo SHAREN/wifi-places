@@ -16,26 +16,24 @@ The Android updater periodically downloads `update.json` from the latest GitHub 
 
 A public GitHub Release must never contain the private ingestion bearer token. The collector sends its locally derived `X-Device-ID`; the server accepts only explicitly allow-listed device IDs and rejects unknown clients before reading their request body. The private bearer token remains available for administrative/API use but is not required by the owner's release APK.
 
-The configured ingestion endpoint itself is not treated as a secret. A generic build can leave the endpoint empty; the owner's release workflow injects it from the GitHub repository variable `WIFI_PLACES_ENDPOINT`.
+The configured ingestion endpoint itself is not treated as a secret. A generic build can leave the endpoint empty; the owner's locally built APK injects it through ignored `private.properties`.
 
-## Release automation
+## Release assets
 
-`.github/workflows/release.yml` builds on tags matching `v*` and creates a GitHub Release containing:
+Each GitHub Release contains:
 
 - `WiFi-Places-Logger-<tag>.apk`;
 - `update.json` with the version code, version name, GitHub APK URL, and SHA-256.
 
-The workflow requires:
-
-- repository variable `WIFI_PLACES_ENDPOINT`;
-- repository secret `WIFI_PLACES_DEBUG_KEYSTORE_B64` containing the base64-encoded signing keystore.
-
-The signing key must remain unchanged because Android only installs an update over an existing package when the signing certificate matches. The key itself must never be committed to Git.
+The Android signing key remains only on the owner's development machine and is backed up separately. It must never be committed or uploaded to the public repository. Keeping the same signing certificate is required for Android to install new versions over the existing package without uninstalling it.
 
 ## Release procedure
 
 1. Update Android `versionCode` and `versionName`.
-2. Commit and push the source to the fork's default branch.
-3. Create/push a tag such as `v0.5`.
-4. GitHub Actions builds and publishes the release.
-5. Existing installations discover the new `update.json` automatically and download the APK from GitHub.
+2. Build locally using the preserved signing key and ignored `private.properties`.
+3. Verify that the APK contains no bearer token and points its updater to GitHub Releases.
+4. Commit and push the source to `SHAREN/wifi-places`.
+5. Create a GitHub Release and upload the APK plus generated `update.json`.
+6. Existing installations discover the new release automatically and download the APK from GitHub.
+
+This keeps the public repository and release APK free of the private server bearer token while still making GitHub the actual download CDN for both manual installs and automatic updates.
