@@ -153,9 +153,7 @@ public final class FingerprintUploader {
 
     private boolean enabled() {
         return BuildConfig.FINGERPRINT_ENDPOINT != null
-                && !BuildConfig.FINGERPRINT_ENDPOINT.trim().isEmpty()
-                && BuildConfig.FINGERPRINT_TOKEN != null
-                && BuildConfig.FINGERPRINT_TOKEN.length() >= 32;
+                && !BuildConfig.FINGERPRINT_ENDPOINT.trim().isEmpty();
     }
 
     private JSONObject buildPayload(final Location location,
@@ -281,12 +279,15 @@ public final class FingerprintUploader {
 
     private boolean post(final JSONArray payload) {
         if (payload.length() == 0) return true;
-        final Request request = new Request.Builder()
+        final Request.Builder builder = new Request.Builder()
                 .url(BuildConfig.FINGERPRINT_ENDPOINT)
-                .header("Authorization", "Bearer " + BuildConfig.FINGERPRINT_TOKEN)
+                .header("X-Device-ID", deviceId)
                 .header("User-Agent", "WiFiPlaces/" + BuildConfig.VERSION_NAME)
-                .post(RequestBody.create(payload.toString(), JSON))
-                .build();
+                .post(RequestBody.create(payload.toString(), JSON));
+        if (BuildConfig.FINGERPRINT_TOKEN != null && BuildConfig.FINGERPRINT_TOKEN.length() >= 32) {
+            builder.header("Authorization", "Bearer " + BuildConfig.FINGERPRINT_TOKEN);
+        }
+        final Request request = builder.build();
         try (Response response = client.newCall(request).execute()) {
             final boolean ok = response.isSuccessful();
             final String responseBody = response.body() == null ? "" : response.body().string();

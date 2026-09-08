@@ -1,0 +1,84 @@
+name: Build GitHub release APK
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Restore owner signing key
+        env:
+          WIFI_PLACES_DEBUG_KEYSTORE_B64: ${{ secrets.WIFI_PLACES_DEBUG_KEYSTORE_B64 }}
+        run: |
+          test -n "$WIFI_PLACES_DEBUG_KEYSTORE_B64"
+          mkdir -p "$HOME/.android"
+          printf '%s' "$WIFI_PLACES_DEBUG_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+
+      - name: Configure owner build
+        env:
+          WIFI_PLACES_ENDPOINT: ${{ vars.WIFI_PLACES_ENDPOINT }}
+        run: |
+          test -n "$WIFI_PLACES_ENDPOINT"
+          cat > private.properties <<EOF
+          fingerprintEndpoint=$WIFI_PLACES_ENDPOINT
+          fingerprintAuth=
+          updateManifestUrl=https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/update.json
+          EOF
+
+      - name: Build APK
+        run: |
+          chmod +x gradlew
+          ./gradlew :wiglewifiwardriving:assembleDebug
+
+      - name: Prepare release assets
+        id: assets
+        shell: bash
+        run: |
+          apk="WiFi-Places-Logger-${GITHUB_REF_NAME}.apk"
+          cp wiglewifiwardriving/build/outputs/apk/debug/wiglewifiwardriving-debug.apk "$apk"
+          sha="$(sha256sum "$apk" | awk '{print $1}')"
+          version_code="$(grep -o 'android:versionCode="[0-9]*"' wiglewifiwardriving/src/main/AndroidManifest.xml | grep -o '[0-9]*' | head -1)"
+          version_name="$(grep -o 'android:versionName="[^"]*"' wiglewifiwardriving/src/main/AndroidManifest.xml | sed 's/.*="//;s/"$//' | head -1)"
+          python3 - <<PY
+          import json
+          obj = {
+              "version_code": int("$version_code"),
+              "version_name": "$version_name",
+              "apk_url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/$apk",
+              "sha256": "$sha",
+          }
+          with open("update.json", "w", encoding="utf-8") as f:
+              json.dump(obj, f, indent=2)
+              f.write("\n")
+          PY
+          echo "apk=$apk" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "${{ steps.assets.outputs.apk }}" update.json \
+            --title "WiFi Places ${GITHUB_REF_NAME}" \
+            --generate-notes

@@ -233,11 +233,20 @@ class Handler(BaseHTTPRequestHandler):
     def authorized(self):
         auth = self.headers.get("Authorization", "")
         prefix = "Bearer "
-        if not auth.startswith(prefix):
+        if auth.startswith(prefix):
+            supplied = auth[len(prefix):].strip().encode()
+            expected = self.server.ingest_token.encode()
+            if hmac.compare_digest(supplied, expected):
+                return True
+
+        # Public APKs must not embed the private server bearer token. For the owner's collector,
+        # accept only explicitly allow-listed high-entropy device ids. Unknown clients are rejected
+        # before the request body is read, so a public build cannot upload arbitrary scan data.
+        supplied_device = self.headers.get("X-Device-ID", "").strip()
+        if not supplied_device:
             return False
-        supplied = auth[len(prefix):].strip().encode()
-        expected = self.server.ingest_token.encode()
-        return hmac.compare_digest(supplied, expected)
+        return any(hmac.compare_digest(supplied_device, expected_device)
+                   for expected_device in self.server.allowed_device_ids)
 
     def do_HEAD(self):
         if urlparse(self.path).path == "/health":
@@ -340,6 +349,10 @@ def main():
     init_db(db_path)
     httpd = ThreadingHTTPServer((args.bind, args.port), Handler)
     httpd.ingest_token = cfg["ingest_token"]
+    allowed = cfg.get("allowed_device_ids") or []
+    if cfg.get("device_id"):
+        allowed = list(allowed) + [cfg["device_id"]]
+    httpd.allowed_device_ids = tuple(sorted({str(x).strip() for x in allowed if str(x).strip()}))
     httpd.db_path = db_path
     print(f"wifi-location API listening on {args.bind}:{args.port}; db={db_path}", flush=True)
     httpd.serve_forever()

@@ -13,7 +13,7 @@ Key additions in this fork:
 - optional self-hosted APK update manifest for automatic update checks/downloads;
 - strict separation between public source and private endpoint/token/build data.
 
-Architecture and design goals: [`docs/SMART_LOCATION_ARCHITECTURE.md`](docs/SMART_LOCATION_ARCHITECTURE.md). Self-hosted server: [`server/`](server/).
+Architecture and design goals: [`docs/SMART_LOCATION_ARCHITECTURE.md`](docs/SMART_LOCATION_ARCHITECTURE.md). Self-hosted server: [`server/`](server/). GitHub Release/update channel: [`docs/GITHUB_RELEASES.md`](docs/GITHUB_RELEASES.md).
 
 This repository remains based on the upstream WiGLE Wireless Wardriving project and retains its license and upstream functionality unless explicitly changed below.
 
