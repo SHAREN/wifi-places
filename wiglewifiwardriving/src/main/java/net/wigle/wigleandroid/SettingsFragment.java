@@ -626,7 +626,7 @@ public final class SettingsFragment extends Fragment implements DialogListener {
                     getString(R.string.language_zh_hk),
             };
             SettingsUtil.doSpinner(R.id.language_spinner, view, PreferenceKeys.PREF_LANGUAGE, "", languages, languageName, getContext());
-            final CheckBox fossMapOn = PrefsBackedCheckbox.prefBackedCheckBox(this.getActivity(), view, R.id.foss_maps, PreferenceKeys.PREF_USE_FOSS_MAPS, false, value -> {
+            final CheckBox fossMapOn = PrefsBackedCheckbox.prefBackedCheckBox(this.getActivity(), view, R.id.foss_maps, PreferenceKeys.PREF_USE_FOSS_MAPS, true, value -> {
                 setFossMapVisible(value, view);
                 if (value) {
                     setupFossMapEditFields(view, prefs, editor);
