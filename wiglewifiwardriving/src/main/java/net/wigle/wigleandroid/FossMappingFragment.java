@@ -8,6 +8,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.Handler;
@@ -22,6 +23,9 @@ import androidx.core.app.ActivityCompat;
 import com.goebl.simplify.PointExtractor;
 import com.goebl.simplify.Simplify;
 
+import net.wigle.wigleandroid.background.PooledQueryExecutor;
+import net.wigle.wigleandroid.db.DatabaseHelper;
+import net.wigle.wigleandroid.model.ConcurrentLinkedHashMap;
 import net.wigle.wigleandroid.model.LatLng;
 import net.wigle.wigleandroid.model.Network;
 import net.wigle.wigleandroid.ui.ThemeUtil;
@@ -118,7 +122,47 @@ public class FossMappingFragment extends AbstractMappingFragment {
 
     @Override
     protected void setupQuery() {
+        // Keep parity with the Google Maps fragment: repopulate the in-memory network cache from
+        // WiGLE's local SQLite history when the map opens. Without this, the MapLibre map only
+        // sees networks discovered during the current process/session, making older markers appear
+        // to have been deleted even though they are still present in the database.
+        if (ListFragment.lameStatic.dbHelper == null) {
+            return;
+        }
 
+        final int queryLimit = ListFragment.lameStatic.networkCache.maxSize() * 2;
+        final String sql = "SELECT bssid FROM " + DatabaseHelper.LOCATION_TABLE
+                + " ORDER BY _id DESC LIMIT ?";
+
+        final PooledQueryExecutor.Request request = new PooledQueryExecutor.Request(
+                sql,
+                new String[]{Integer.toString(queryLimit)},
+                new PooledQueryExecutor.ResultHandler() {
+                    @Override
+                    public boolean handleRow(final Cursor cursor) {
+                        final String bssid = cursor.getString(0);
+                        final ConcurrentLinkedHashMap<String, Network> networkCache = MainActivity.getNetworkCache();
+                        Network network = networkCache.get(bssid);
+                        if (network == null) {
+                            network = ListFragment.lameStatic.dbHelper.getNetwork(bssid);
+                            if (network != null) {
+                                networkCache.put(network.getBssid(), network);
+                            }
+                        }
+                        // Continue through duplicate recent observations until the cache reaches
+                        // capacity; the query is newest-first so current/recent networks win.
+                        return !networkCache.isFull();
+                    }
+
+                    @Override
+                    public void complete() {
+                        if (mapView != null) {
+                            mapView.post(FossMappingFragment.this::reClusterVisibleNetworks);
+                        }
+                    }
+                },
+                ListFragment.lameStatic.dbHelper);
+        PooledQueryExecutor.enqueue(request);
     }
 
     @SuppressLint("MissingPermission")

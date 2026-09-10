@@ -9,6 +9,7 @@ Key additions in this fork:
 - smart location-power policy: known Wi-Fi fingerprint → temporarily suppress continuous GPS; unknown/ambiguous fingerprint → re-enable location and learn;
 - Android network-location fallback enabled by default for indoor learning;
 - MapLibre/FOSS maps enabled by default with the keyless OpenFreeMap Liberty style, so public builds do not require a Google Maps API key;
+- MapLibre map startup reloads historical locally stored networks from WiGLE's SQLite database, preserving older markers across app restarts/updates;
 - Wi-Fi scan watchdog that retries stuck scan callbacks without relying on forbidden system Wi-Fi toggles;
 - stock WiGLE.net upload control disabled by default in the private collector UI;
 - optional self-hosted APK update manifest for automatic update checks/downloads;
