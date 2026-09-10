@@ -157,6 +157,11 @@ public class FossMappingFragment extends AbstractMappingFragment {
                     setupTileOverlay(mapLibreMap, prefs, style);
                     setupRouteVisualization(mapLibreMap, prefs, visualizeRoute);
                     initializeCameraPosition(mapLibreMap, oldCenter, oldZoom, prefs);
+                    // OpenFreeMap's full style takes longer to settle than the old demo style.
+                    // Rebuild markers after the initial camera jump and once more after rendering
+                    // has had time to populate the projection/viewport completely.
+                    timer.postDelayed(this::reClusterVisibleNetworks, 250L);
+                    timer.postDelayed(this::reClusterVisibleNetworks, 1500L);
                 });
             } catch (RuntimeException styleEx) {
                 Logging.error("Failed to apply FOSS map style '" + styleUrl + "': ", styleEx);
@@ -227,14 +232,26 @@ public class FossMappingFragment extends AbstractMappingFragment {
 
             @Override
             public void onMove(@NonNull MoveGestureDetector moveGestureDetector) {
-                //n/a
+                // no-op while moving; clustering on every frame is too expensive
             }
 
             @Override
             public void onMoveEnd(@NonNull MoveGestureDetector moveGestureDetector) {
-                //n/a
+                // camera-idle below performs the single re-cluster after the gesture settles
             }
         });
+
+        // FossMapRender clusters only networks inside the current visible bounds. Rebuild after
+        // every completed camera move/zoom so a camera jump to the current location never leaves
+        // markers calculated for the previous viewport.
+        map.addOnCameraIdleListener(this::reClusterVisibleNetworks);
+    }
+
+    private void reClusterVisibleNetworks() {
+        final FossMapRender renderer = mapRender;
+        if (renderer != null && !finishing.get()) {
+            renderer.reCluster();
+        }
     }
 
     /**
