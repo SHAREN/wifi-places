@@ -148,7 +148,7 @@ public class FossNetworkActivity extends AbstractNetworkActivity {
                 if (mapServerKey != null && !mapServerKey.isEmpty()) {
                     styleUrl = mapServerUrl + mapServerKey;
                 } else {
-                    styleUrl = "https://demotiles.maplibre.org/style.json";
+                    styleUrl = "https://tiles.openfreemap.org/styles/liberty";
                 }
                 try {
                     mapLibreMap.setStyle(styleUrl, style -> {
