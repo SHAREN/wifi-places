@@ -248,6 +248,10 @@ public class GNSSListener implements LocationListener {
                 currentLocation = newLocation;
             }
         }
+        else if ( newOK && MainActivity.PASSIVE_ONLY_MODE ) {
+            // Keep following opportunistic passive/fused fixes without issuing a request ourselves.
+            currentLocation = newLocation;
+        }
         if (currentLocation != null && currentLocation.getTime() != 0L &&
                 currentLocation.getAccuracy()  < MIN_ROUTE_LOCATION_PRECISION_METERS &&
                 currentLocation.getAccuracy()  > 0.0d) {
@@ -415,6 +419,13 @@ public class GNSSListener implements LocationListener {
             gpsLost |= horribleGps(location);
             if (gpsLost) Logging.info("network gpsLost");
             retval = ! gpsLost;
+        }
+        else if ( MainActivity.PASSIVE_ONLY_MODE ) {
+            // PASSIVE_PROVIDER may surface fixes produced by fused/system providers. Judge these
+            // by their own timestamp/accuracy instead of requiring our own GNSS satellite state.
+            final long ageMs = Math.max(0L, now - location.getTime());
+            final long passiveTimeout = Math.max(gpsTimeout, networkLocationTimeout);
+            retval = ageMs <= passiveTimeout && !horribleGps(location);
         }
 
         return retval;

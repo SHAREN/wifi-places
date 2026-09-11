@@ -121,6 +121,7 @@ public class WifiReceiver extends BroadcastReceiver {
      * fresh request instead of depending on setWifiEnabled(false/true).
      */
     public void watchdogScan() {
+        if (MainActivity.PASSIVE_ONLY_MODE) return;
         if (mainActivity == null || !mainActivity.isScanning()) return;
         final long now = System.currentTimeMillis();
         final long reference = lastScanResponseTime < 0 ? constructionTime : lastScanResponseTime;
@@ -143,11 +144,16 @@ public class WifiReceiver extends BroadcastReceiver {
     @SuppressWarnings("ConstantConditions")
     @Override
     public void onReceive( final Context context, final Intent intent ) {
+        if (MainActivity.PASSIVE_ONLY_MODE && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                && !intent.getBooleanExtra(WifiManager.EXTRA_RESULTS_UPDATED, false)) {
+            Logging.debug("passive Wi-Fi callback ignored: results were not freshly updated");
+            return;
+        }
         scanInFlight = false;
         final long now = System.currentTimeMillis();
         lastScanResponseTime = now;
         // Refresh the scan PARTIAL_WAKE_LOCK on scan completed instead of pinning the CPU
-        if (mainActivity != null) {
+        if (mainActivity != null && !MainActivity.PASSIVE_ONLY_MODE) {
             mainActivity.refreshScanWakeLock();
         }
         // final long start = now;
@@ -168,7 +174,7 @@ public class WifiReceiver extends BroadcastReceiver {
         long nonstopScanRequestTime = Long.MIN_VALUE;
         final SharedPreferences prefs = mainActivity.getSharedPreferences( PreferenceKeys.SHARED_PREFS, 0 );
         final long period = getScanPeriod();
-        if ( period == 0 ) {
+        if ( period == 0 && !MainActivity.PASSIVE_ONLY_MODE ) {
             // treat as "continuous", so request scan in here
             doWifiScan();
             nonstopScanRequestTime = now;
@@ -583,6 +589,10 @@ public class WifiReceiver extends BroadcastReceiver {
     }
 
     public void setupWifiTimer( final boolean turnedWifiOn ) {
+        if (MainActivity.PASSIVE_ONLY_MODE) {
+            Logging.info("passive-only: Wi-Fi active scan timer disabled");
+            return;
+        }
         Logging.info( "create wifi timer" );
         if ( wifiTimer == null ) {
             wifiTimer = new Handler();
@@ -649,6 +659,9 @@ public class WifiReceiver extends BroadcastReceiver {
      * Schedule the next WiFi scan
      */
     public void scheduleScan() {
+        if (MainActivity.PASSIVE_ONLY_MODE || wifiTimer == null) {
+            return;
+        }
         wifiTimer.post(this::doWifiScan);
     }
 
@@ -680,6 +693,9 @@ public class WifiReceiver extends BroadcastReceiver {
      * @return true if a scan was submitted (optimistic; actual result is applied asynchronously)
      */
     private boolean doWifiScan() {
+        if (MainActivity.PASSIVE_ONLY_MODE) {
+            return false;
+        }
         // MainActivity.info("do wifi scan. lastScanTime: " + lastScanResponseTime);
         final WifiManager wifiManager = (WifiManager) mainActivity.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
         boolean submitted = false;

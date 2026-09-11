@@ -218,6 +218,10 @@ public final class MainActivity extends AppCompatActivity implements TextToSpeec
     static final String ERROR_REPORT_DO_EMAIL = "doEmail";
     public static final String ERROR_REPORT_DIALOG = "doDialog";
 
+    /** WiFi Places private collector: never initiate radio/location discovery.
+     *  We only consume scans/fixes that Android or another app already produced. */
+    public static final boolean PASSIVE_ONLY_MODE = true;
+
     public static final long DEFAULT_SPEECH_PERIOD = 60L;
     public static final long DEFAULT_RESET_WIFI_PERIOD = 90000L;
     public static final long LOCATION_UPDATE_INTERVAL = 1000L;
@@ -1152,18 +1156,22 @@ public final class MainActivity extends AppCompatActivity implements TextToSpeec
             //TODO: redundant with endBluetooth?
             final BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
             try {
-                if (bluetoothAdapter != null && bluetoothAdapter.isDiscovering()) {
+                if (!PASSIVE_ONLY_MODE && bluetoothAdapter != null && bluetoothAdapter.isDiscovering()) {
                     bluetoothAdapter.cancelDiscovery();
                 }
-                Logging.info("unregister bluetoothReceiver");
-                unregisterReceiver(state.bluetoothReceiver);
+                if (state.bluetoothReceiver != null) {
+                    Logging.info("unregister bluetoothReceiver");
+                    unregisterReceiver(state.bluetoothReceiver);
+                }
             } catch (final IllegalArgumentException ex) {
                 Logging.info("bluetoothReceiver not registered: " + ex);
             } catch (final SecurityException ex) {
                 Logging.info("bluetoothReceiver access: " + ex);
             }
             if (state.bluetoothReceiver != null) {
-                state.bluetoothReceiver.stopScanning();
+                if (!PASSIVE_ONLY_MODE) {
+                    state.bluetoothReceiver.stopScanning();
+                }
                 state.bluetoothReceiver.close();
             }
             if (screenStateReceiver != null) {
@@ -1922,6 +1930,9 @@ public final class MainActivity extends AppCompatActivity implements TextToSpeec
     }
 
     private boolean canWifiBeActivated() {
+        if (PASSIVE_ONLY_MODE) {
+            return false;
+        }
         final WifiManager wifiManager = (WifiManager) this.getApplicationContext().
                 getSystemService(Context.WIFI_SERVICE);
         if (null == wifiManager) {
@@ -1934,6 +1945,19 @@ public final class MainActivity extends AppCompatActivity implements TextToSpeec
         final WifiManager wifiManager = (WifiManager) this.getApplicationContext().
                 getSystemService(Context.WIFI_SERVICE);
         final Editor edit = prefs.edit();
+
+        if (PASSIVE_ONLY_MODE) {
+            // Android 10+ broadcasts completed full Wi-Fi scans performed by the platform or other
+            // apps. Register only for those results: no timer, no startScan(), no Wi-Fi lock, and
+            // no cell-scan timer. This keeps the collector opportunistic and near-zero-radio-cost.
+            if (state.wifiReceiver == null) {
+                Logging.info("	new passive wifiReceiver");
+                state.wifiReceiver = new WifiReceiver(this, state.dbHelper);
+            }
+            setupWifiReceiverIntent();
+            Logging.info("WiFi Places passive-only Wi-Fi collection enabled");
+            return;
+        }
 
         // keep track of for later
         boolean turnedWifiOn = false;
@@ -2029,6 +2053,9 @@ public final class MainActivity extends AppCompatActivity implements TextToSpeec
     }
 
     private boolean canBtBeActivated() {
+        if (PASSIVE_ONLY_MODE) {
+            return false;
+        }
         try {
             final BluetoothAdapter bt = BluetoothAdapter.getDefaultAdapter();
             if (bt == null) {
@@ -2052,6 +2079,29 @@ public final class MainActivity extends AppCompatActivity implements TextToSpeec
                 Logging.info("No bluetooth adapter");
                 return;
             }
+
+            if (PASSIVE_ONLY_MODE) {
+                // Android has no generic passive BLE ScanCallback feed from other apps. We can,
+                // however, consume classic ACTION_FOUND broadcasts whenever some other app/system
+                // discovery is already in progress. Never enable Bluetooth or start discovery here.
+                if (prefs.getBoolean(PreferenceKeys.PREF_SCAN_BT, true)) {
+                    if (state.bluetoothReceiver == null) {
+                        final boolean hasLeSupport = getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE);
+                        state.bluetoothReceiver = new BluetoothReceiver(state.dbHelper, hasLeSupport, prefs);
+                    }
+                    final IntentFilter passiveBtFilter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
+                    passiveBtFilter.addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED);
+                    passiveBtFilter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        registerReceiver(state.bluetoothReceiver, passiveBtFilter, RECEIVER_EXPORTED);
+                    } else {
+                        registerReceiver(state.bluetoothReceiver, passiveBtFilter);
+                    }
+                    Logging.info("WiFi Places passive-only classic Bluetooth listener enabled");
+                }
+                return;
+            }
+
             final Editor edit = prefs.edit();
             if (prefs.getBoolean(PreferenceKeys.PREF_SCAN_BT, true)) {
                 //NB: almost certainly getting specious 'false' answers to isEnabled.
@@ -2167,6 +2217,19 @@ public final class MainActivity extends AppCompatActivity implements TextToSpeec
 
     @SuppressLint("MissingPermission")
     public void endBluetooth(SharedPreferences prefs) {
+        if (PASSIVE_ONLY_MODE) {
+            // We did not start discovery, so never cancel system/another app's discovery.
+            if (state.bluetoothReceiver != null) {
+                try {
+                    unregisterReceiver(state.bluetoothReceiver);
+                } catch (final IllegalArgumentException ex) {
+                    Logging.info("	passive bluetoothReceiver not registered: " + ex);
+                }
+                state.bluetoothReceiver = null;
+            }
+            return;
+        }
+
         if (state.bluetoothReceiver != null) {
             state.bluetoothReceiver.stopScanning();
         }
@@ -2220,6 +2283,9 @@ public final class MainActivity extends AppCompatActivity implements TextToSpeec
     }
 
     public void bluetoothScan() {
+        if (PASSIVE_ONLY_MODE) {
+            return;
+        }
         if (state.bluetoothReceiver != null) {
             state.bluetoothReceiver.bluetoothScan();
         }
@@ -2270,10 +2336,16 @@ public final class MainActivity extends AppCompatActivity implements TextToSpeec
     }
 
     public void scheduleScan() {
+        if (PASSIVE_ONLY_MODE) {
+            return;
+        }
         state.wifiReceiver.scheduleScan();
     }
 
     public void runWifiScanWatchdog() {
+        if (PASSIVE_ONLY_MODE) {
+            return;
+        }
         if (state != null && state.wifiReceiver != null) {
             state.wifiReceiver.watchdogScan();
         }
@@ -2321,6 +2393,13 @@ public final class MainActivity extends AppCompatActivity implements TextToSpeec
 
     private void setupLocation(final SharedPreferences prefs) {
         final LocationManager locationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
+
+        if (PASSIVE_ONLY_MODE) {
+            if (state.GNSSListener == null) {
+                internalHandleScanChange(prefs.getBoolean(PreferenceKeys.PREF_SCAN_RUNNING, true));
+            }
+            return;
+        }
 
         try {
             // check if there is a gps
@@ -2410,18 +2489,20 @@ public final class MainActivity extends AppCompatActivity implements TextToSpeec
             if (state.cellReceiver != null) {
                 state.cellReceiver.setupCellTimer(false);
             }
-            // turn on location updates
+            // Passive-only mode registers only a passive LocationManager listener. It does not
+            // acquire Wi-Fi/CPU locks or ask Android to exempt us from battery optimizations.
             this.setLocationUpdates(getLocationSetPeriod(), 0f);
-
-            if (!state.wifiLock.isHeld()) {
-                state.wifiLock.acquire();
+            if (PASSIVE_ONLY_MODE) {
+                state.wantsScanWakeLock = false;
+                releaseScanWakeLock();
+            } else {
+                if (state.wifiLock != null && !state.wifiLock.isHeld()) {
+                    state.wifiLock.acquire();
+                }
+                state.wantsScanWakeLock = true;
+                acquireScanWakeLockIfNeeded();
+                optionalShowBatteryOptDialog();
             }
-            // PARTIAL_WAKE_LOCK keep-alive for scan callbacks when screen is off. Actually acquired
-            // by acquireScanWakeLockIfNeeded() and by the SCREEN_OFF broadcast; refreshed each time
-            // WifiReceiver.onReceive() fires.
-            state.wantsScanWakeLock = true;
-            acquireScanWakeLockIfNeeded();
-            optionalShowBatteryOptDialog();
         } else {
             if (listFragment != null) {
                 listFragment.setScanStatusUI(getString(R.string.list_scanning_off));
@@ -2433,7 +2514,7 @@ public final class MainActivity extends AppCompatActivity implements TextToSpeec
             // turn off location updates
             this.setLocationUpdates(0L, 0f);
             state.GNSSListener.handleScanStop();
-            if (state.wifiLock.isHeld()) {
+            if (state.wifiLock != null && state.wifiLock.isHeld()) {
                 try {
                     state.wifiLock.release();
                 } catch (SecurityException ex) {
@@ -2539,9 +2620,39 @@ public final class MainActivity extends AppCompatActivity implements TextToSpeec
      */
     public void setLocationUpdates(final long updateIntervalMillis, final float updateMeters) {
         try {
-            internalSetLocationUpdates(updateIntervalMillis, updateMeters);
+            if (PASSIVE_ONLY_MODE) {
+                internalSetPassiveLocationUpdates(isScanning());
+            } else {
+                internalSetLocationUpdates(updateIntervalMillis, updateMeters);
+            }
         } catch (final SecurityException ex) {
             Logging.error("Security exception in setLocationUpdates: " + ex, ex);
+        }
+    }
+
+    private void internalSetPassiveLocationUpdates(final boolean enabled) throws SecurityException {
+        final LocationManager locationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
+        if (state.GNSSListener != null) {
+            locationManager.removeUpdates(state.GNSSListener);
+        }
+        if (gnssStatusCallback != null) {
+            try { locationManager.unregisterGnssStatusCallback(gnssStatusCallback); } catch (Exception ignored) {}
+            gnssStatusCallback = null;
+        }
+        if (gnssMeasurementsCallback != null) {
+            try { locationManager.unregisterGnssMeasurementsCallback(gnssMeasurementsCallback); } catch (Exception ignored) {}
+            gnssMeasurementsCallback = null;
+        }
+
+        state.GNSSListener = new GNSSListener(this, state.dbHelper);
+        state.GNSSListener.setMapListener(MappingFragment.STATIC_LOCATION_LISTENER);
+        if (enabled && locationManager.getAllProviders().contains(LocationManager.PASSIVE_PROVIDER)) {
+            // PASSIVE_PROVIDER never powers location hardware on our behalf. It receives fixes that
+            // were already requested by another app or the Android platform.
+            locationManager.requestLocationUpdates(LocationManager.PASSIVE_PROVIDER, 0L, 0f, state.GNSSListener);
+            Logging.info("WiFi Places passive-only location listener registered");
+        } else {
+            Logging.info("WiFi Places passive-only location listener disabled");
         }
     }
 

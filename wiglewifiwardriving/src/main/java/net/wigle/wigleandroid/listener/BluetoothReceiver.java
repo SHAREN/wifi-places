@@ -348,6 +348,9 @@ public final class BluetoothReceiver extends BroadcastReceiver implements LeScan
      * initiate a bluetooth scan, if discovery is not currently in-progress (callbacks via onReceive)
      */
     public void bluetoothScan() {
+        if (MainActivity.PASSIVE_ONLY_MODE) {
+            return;
+        }
         final BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         if (bluetoothAdapter == null) {
             return;
@@ -411,6 +414,10 @@ public final class BluetoothReceiver extends BroadcastReceiver implements LeScan
      * Stop all scanning - both bluetoothAdapter and bluetoothLeScanner
      */
     public void stopScanning() {
+        if (MainActivity.PASSIVE_ONLY_MODE) {
+            scanning.set(false);
+            return;
+        }
         final BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         if (bluetoothAdapter != null) {
             try {
@@ -594,6 +601,10 @@ public final class BluetoothReceiver extends BroadcastReceiver implements LeScan
      * create the bluetooth timer thread
      */
     public void setupBluetoothTimer( final boolean turnedBtOn ) {
+        if (MainActivity.PASSIVE_ONLY_MODE) {
+            Logging.info("passive-only: Bluetooth active scan timer disabled");
+            return;
+        }
         Logging.info( "create Bluetooth timer" );
         final MainActivity m = MainActivity.getMainActivity();
         if ( bluetoothTimer == null) {
@@ -644,6 +655,9 @@ public final class BluetoothReceiver extends BroadcastReceiver implements LeScan
     }
 
     public boolean doBluetoothScan() {
+        if (MainActivity.PASSIVE_ONLY_MODE) {
+            return false;
+        }
         boolean success = false;
         final MainActivity m = MainActivity.getMainActivity();
         if (null != m) {

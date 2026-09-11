@@ -170,3 +170,15 @@ Daily analysis should work from compact visit/place summaries rather than feedin
 ## Design invariant
 
 The system is successful when, after a place has been learned, repeatedly visiting it requires almost no precise-location work: the surrounding Wi‑Fi fingerprint is enough to recognize the place, while GPS/location wakes only for learning, ambiguity, meaningful environmental change, and occasional verification.
+
+## Passive-only collector mode (WiFi Places default)
+
+The private WiFi Places build runs in passive-only mode by default. It must not initiate GNSS, network-location, Wi-Fi, classic Bluetooth, BLE, or cell discovery.
+
+- Location: subscribe only to LocationManager.PASSIVE_PROVIDER; consume fixes already produced for the platform or another app.
+- Wi-Fi: register for WifiManager.SCAN_RESULTS_AVAILABLE_ACTION and consume only fresh EXTRA_RESULTS_UPDATED=true results; never call WifiManager.startScan().
+- Bluetooth: never call startDiscovery() or BluetoothLeScanner.startScan(). Android exposes no general passive BLE feed from scans initiated by other apps; classic BluetoothDevice.ACTION_FOUND broadcasts may still be consumed opportunistically when another discovery is already running.
+- Cell: no periodic cell-scan timer in passive-only mode.
+- Power: do not acquire Wi-Fi scan locks or scan partial wake locks just to wait for passive events.
+
+This mode prioritizes battery life over guaranteed sampling cadence: if the OS/other apps do not request a location or Wi-Fi scan, WiFi Places records nothing until a passive event becomes available.
